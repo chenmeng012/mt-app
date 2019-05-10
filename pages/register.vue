@@ -43,14 +43,14 @@
 </template>
 
 <script>
-import ElInput from "element-ui/packages/input/src/input";
+import CryptoJS from "crypto-js";
 
 export default {
-  components: {ElInput},
   name: 'register',
   layout: 'blank',
   data() {
     return {
+      timerid: null,
       statusMsg: '',
       error: '',
       ruleForm: {
@@ -89,10 +89,62 @@ export default {
   },
   methods: {
     sendMsg() {
-
+      let namePass, emailPass, self = this;
+      if (this.timerid) return false;
+      this.$refs['ruleForm'].validateField('name', (valid) => {
+        namePass = valid;
+      });
+      this.statusMsg = '';
+      if(namePass) return false;
+      this.$refs['ruleForm'].validateField('email', (valid) => {
+        emailPass = valid;
+      });
+      if (!namePass && !emailPass) {
+        this.$axios.post('/users/verify', {
+          username: encodeURIComponent(self.ruleForm.name),
+          email: self.ruleForm.email
+        }).then(({ status, data }) => {
+          if (status === 200 && data && data.code === 0) {
+            let count = 60;
+            self.statusMsg = `验证码已发送，剩余${count--}秒`;
+            self.timerid = setInterval(() => {
+              self.statusMsg = `验证码已发送，剩余${count--}秒`;
+              if (count === 0){
+                this.statusMsg = '';
+                clearInterval(self.timerid)
+              }
+            }, 1000)
+          } else {
+            self.statusMsg = data.msg
+          }
+        })
+      }
     },
     register() {
-
+      let self = this;
+      this.$refs['ruleForm'].validate((valid) => {
+        if (valid) {
+          self.$axios.post('/users/signup', {
+            username: window.encodeURIComponent(self.ruleForm.name),
+            password: CryptoJS.MD5(self.ruleForm.pwd).toString(),
+            email: self.ruleForm.email,
+            code: self.ruleForm.code
+          }).then(({status, data}) => {
+            if (status === 200){
+              if (data && data.code === 0){
+                location.href = '/login'
+              } else {
+                self.error = data.msg
+              }
+            } else {
+              self.error = `服务器出错，错误吗:${status}`
+            }
+            setTimeout(() => {
+              self.error = ''
+            }, 1500)
+          })
+        }
+      })
     }
   }
 }
